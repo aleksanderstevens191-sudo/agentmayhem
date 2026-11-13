@@ -21,14 +21,17 @@ const FALLBACK_CONTINUE_TEXT =
   "The previous agent stopped on a usage limit. Continue where it left off.";
 
 /**
- * The entry after the thread's current agent, so a chain of limited agents walks the list once
- * instead of looping. An agent not in the list starts at the first entry that is not itself.
+ * The entry after the thread's current agent and model, so a chain of limited agents walks the list
+ * once instead of looping, even when an agent is listed twice. An agent not in the list starts at
+ * the first entry that is not itself.
  */
 export function nextUsageLimitFallback(
   current: ModelSelection,
   fallbacks: ReadonlyArray<ModelSelection>,
 ): ModelSelection | null {
-  const position = fallbacks.findIndex((entry) => entry.instanceId === current.instanceId);
+  const position = fallbacks.findLastIndex(
+    (entry) => entry.instanceId === current.instanceId && entry.model === current.model,
+  );
   const rest = position === -1 ? fallbacks : fallbacks.slice(position + 1);
   return rest.find((entry) => entry.instanceId !== current.instanceId) ?? null;
 }
@@ -46,7 +49,7 @@ export function usageLimitFallbackCommands(
     | "modelSelection"
   >,
   fallbacks: ReadonlyArray<ModelSelection>,
-): ReadonlyArray<OrchestrationV2Command> | null {
+): readonly [OrchestrationV2Command, OrchestrationV2Command] | null {
   if (
     thread.status !== "failed" ||
     thread.lastErrorClass !== "usage_limit" ||
@@ -99,8 +102,20 @@ export const layer = Layer.effectDiscard(
       if (thread === null) return;
       const commands = usageLimitFallbackCommands(thread, usageLimitFallbacks);
       if (commands === null) return;
+      const [switchCommand, continueCommand] = commands;
       // Command ids repeat for the same limited run, so a second event cannot switch twice.
-      for (const command of commands) yield* threads.dispatch(command);
+      yield* threads.dispatch(switchCommand);
+      // The two dispatches lock separately; a stop, settle, or new message in between wins.
+      const after = yield* threads.getThreadShell(threadId);
+      if (
+        after === null ||
+        after.latestRunId !== thread.latestRunId ||
+        after.status !== "failed" ||
+        after.archivedAt !== null ||
+        after.settledOverride === "settled"
+      )
+        return;
+      yield* threads.dispatch(continueCommand);
     });
 
     yield* forkParked(

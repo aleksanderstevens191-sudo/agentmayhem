@@ -29,6 +29,9 @@ it("walks the fallback list once, starting after the current agent", () => {
   assert.strictEqual(nextUsageLimitFallback(codexSchool, fallbacks), null);
   assert.strictEqual(nextUsageLimitFallback(selection("grok", "grok-5"), fallbacks), claude);
   assert.strictEqual(nextUsageLimitFallback(claude, [claude]), null);
+  // An agent listed twice never sends the walk back to an earlier entry.
+  const sonnet = selection("claude", "claude-sonnet-5-5");
+  assert.strictEqual(nextUsageLimitFallback(sonnet, [claude, codexPersonal, sonnet]), null);
 });
 
 it("switches a usage-limited thread and continues it, once per limited run", () => {
