@@ -460,6 +460,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["usage quota rate limit reset recover continue"],
   },
   {
+    id: "usage-limit-fallbacks",
+    title: "Switch agents on usage limits",
+    to: "/settings/threads",
+    searchTerms: ["usage quota rate limit fallback another agent provider account continue"],
+    environmentOnly: true,
+    scope: "environment-defaults",
+  },
+  {
     id: "working-shelf",
     title: msg("Working section"),
     to: "/settings/general",
