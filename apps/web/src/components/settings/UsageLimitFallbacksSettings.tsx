@@ -122,10 +122,14 @@ export function UsageLimitFallbacksRow() {
 
   const listed = new Set(draft.map((entry) => entry.instanceId));
   const ready = entries.filter(isProviderInstancePickerReady);
-  const addable = ready.find((entry) => !listed.has(entry.instanceId));
-  const addableModel = addable
-    ? getDefaultProviderInstanceModel(providers, addable.instanceId)
-    : undefined;
+  const unlisted = ready.filter((entry) => !listed.has(entry.instanceId));
+  // Skips agents that a selected environment lacks, so Add never retries a rejected one.
+  const addable = unlisted.flatMap((entry) => {
+    const model = getDefaultProviderInstanceModel(providers, entry.instanceId);
+    return model !== undefined && modelDisabledReason(entry.instanceId, model) === null
+      ? [{ instanceId: entry.instanceId, model }]
+      : [];
+  })[0];
   const keys = rowKeys(draft);
 
   return (
@@ -240,9 +244,9 @@ export function UsageLimitFallbacksRow() {
           <Button
             variant="ghost-muted"
             size="compact"
-            disabled={!addable || !addableModel}
+            disabled={!addable}
             onClick={() => {
-              if (addable && addableModel) choose(draft.length, addable.instanceId, addableModel);
+              if (addable) choose(draft.length, addable.instanceId, addable.model);
             }}
           >
             <PlusIcon />
@@ -250,7 +254,11 @@ export function UsageLimitFallbacksRow() {
           </Button>
           {!addable ? (
             <span className="ps-2 text-xs text-muted-foreground">
-              {ready.length > 0 ? "Every ready agent is listed" : "No agents are ready"}
+              {unlisted.length > 0
+                ? "The other agents are not on every selected environment"
+                : ready.length > 0
+                  ? "Every ready agent is listed"
+                  : "No agents are ready"}
             </span>
           ) : null}
         </div>
