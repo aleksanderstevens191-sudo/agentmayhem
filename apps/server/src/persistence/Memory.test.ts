@@ -27,7 +27,7 @@ layer("MemoryRepository", (it) => {
       yield* save("a-only", projectA, "2026-11-02T00:00:00.000Z");
       yield* save("b-only", projectB, "2026-11-03T00:00:00.000Z");
 
-      const inA = yield* memory.listVisible({ projectId: projectA });
+      const inA = yield* memory.listVisible({ projectId: projectA, words: [], limit: 10 });
       assert.deepStrictEqual(
         inA.map((entry) => [entry.id, entry.scope]),
         [
@@ -35,9 +35,19 @@ layer("MemoryRepository", (it) => {
           ["global-old", "global"],
         ],
       );
-      const outside = yield* memory.listVisible({ projectId: null });
+      const outside = yield* memory.listVisible({ projectId: null, words: [], limit: 10 });
       assert.deepStrictEqual(
         outside.map((entry) => entry.id),
+        ["global-old"],
+      );
+
+      // Words filter before the limit, so an older match outlives newer unrelated memories.
+      assert.deepStrictEqual(
+        (yield* memory.listVisible({
+          projectId: projectA,
+          words: ["GLOBAL", "old"],
+          limit: 1,
+        })).map((entry) => entry.id),
         ["global-old"],
       );
 
@@ -45,7 +55,10 @@ layer("MemoryRepository", (it) => {
       assert.isFalse(yield* memory.forget({ id: MemoryId.make("a-only"), projectId: projectB }));
       assert.isTrue(yield* memory.forget({ id: MemoryId.make("a-only"), projectId: projectA }));
       assert.isTrue(yield* memory.forget({ id: MemoryId.make("global-old"), projectId: null }));
-      assert.deepStrictEqual(yield* memory.listVisible({ projectId: projectA }), []);
+      assert.deepStrictEqual(
+        yield* memory.listVisible({ projectId: projectA, words: [], limit: 10 }),
+        [],
+      );
     }),
   );
 });

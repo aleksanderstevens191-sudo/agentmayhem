@@ -1,5 +1,6 @@
 import * as WorktreeBranchSync from "./WorktreeBranchSync.ts";
 import * as GuestShareService from "../guest/GuestShareService.ts";
+import * as UsageLimitFallbackWorker from "./UsageLimitFallbackWorker.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as Layer from "effect/Layer";
@@ -405,6 +406,9 @@ export const layerProduction = Layer.mergeAll(
         layerOrchestratorProvided,
       ),
     ),
+  ),
+  UsageLimitFallbackWorker.layer.pipe(
+    Layer.provide(Layer.mergeAll(layerThreadManagementProvided, layerOrchestratorProvided)),
   ),
   layerProviderContinuationWorkerProvided,
   layerAgentSessionScannerProvided,

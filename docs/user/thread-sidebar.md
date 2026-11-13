@@ -268,6 +268,26 @@ the snooze. Enable **Snooze until limits reset** in thread behavior settings to
 snooze limit stops by default. Providers without a reset time offer manual
 retry and the normal snooze choices.
 
+To keep working on another subscription instead of waiting, list agents in
+`usageLimitFallbacks` in the server's `settings.json` (for example
+`~/.t3/userdata/settings.json`), in order:
+
+```json
+{
+  "usageLimitFallbacks": [
+    { "instanceId": "claude", "model": "claude-opus-5-5" },
+    { "instanceId": "codex", "model": "gpt-6.1-sol" }
+  ]
+}
+```
+
+When a thread stops on a usage limit, T3 Code switches it to the entry after its
+current agent and asks it to continue, with the same
+[context handoff](./portable-handoffs.md) as a manual provider switch. If that agent
+is limited too, the thread moves to the next entry; after the last one it waits as
+usual. Use the instance IDs from **Settings → Providers**. Remove the key to turn
+fallback off.
+
 On web and desktop, use **Agents** to follow work delegated to subagents.
 On mobile, open a subagent from its conversation card or **Agents**. On iOS
 layouts with an inspector, its thread opens beside the parent. Maximize it to

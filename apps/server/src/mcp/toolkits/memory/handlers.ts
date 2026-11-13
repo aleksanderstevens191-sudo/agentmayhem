@@ -13,13 +13,6 @@ import * as McpToolAccess from "../../McpToolAccess.ts";
 import { loadCaller, unavailable } from "../../threadAccess.ts";
 import { MemoryToolkit } from "./tools.ts";
 
-/** Every query word must appear, ignoring case. */
-function matchesQuery(entry: Pick<MemoryEntry, "text">, query: string | undefined) {
-  const words = (query ?? "").toLowerCase().split(/\s+/u).filter(Boolean);
-  const text = entry.text.toLowerCase();
-  return words.every((word) => text.includes(word));
-}
-
 const callerProjectId = loadCaller().pipe(Effect.map(({ caller }) => caller?.projectId ?? null));
 
 const make = Effect.gen(function* () {
@@ -54,11 +47,14 @@ const make = Effect.gen(function* () {
     memory_search: McpToolAccess.reads((input) =>
       Effect.gen(function* () {
         const projectId = yield* callerProjectId;
-        const visible = yield* memory.listVisible({ projectId }).pipe(Effect.mapError(unavailable));
-        const limit = input.limit ?? MEMORY_SEARCH_DEFAULT_LIMIT;
-        return {
-          memories: visible.filter((entry) => matchesQuery(entry, input.query)).slice(0, limit),
-        };
+        const memories = yield* memory
+          .listVisible({
+            projectId,
+            words: (input.query ?? "").split(/\s+/u).filter(Boolean),
+            limit: input.limit ?? MEMORY_SEARCH_DEFAULT_LIMIT,
+          })
+          .pipe(Effect.mapError(unavailable));
+        return { memories };
       }),
     ),
     memory_forget: McpToolAccess.writes(
