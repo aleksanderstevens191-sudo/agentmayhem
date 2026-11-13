@@ -13,9 +13,6 @@ import {
   type MemoryRepositoryError,
 } from "./Errors.ts";
 
-/** Memories are short, so matching runs over the newest rows in memory rather than in SQL. */
-const MEMORY_SCAN_LIMIT = 5_000;
-
 export interface SaveMemoryInput {
   readonly id: MemoryId;
   readonly projectId: ProjectId | null;
@@ -27,6 +24,9 @@ export interface SaveMemoryInput {
 export interface ListMemoryInput {
   /** Global memories, plus this project's when set. */
   readonly projectId: ProjectId | null;
+  /** Each word must appear in the text, ignoring ASCII case. */
+  readonly words: ReadonlyArray<string>;
+  readonly limit: number;
 }
 
 export class MemoryRepository extends Context.Service<
@@ -58,9 +58,13 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   const listRows = SqlSchema.findAll({
-    Request: Schema.Struct({ projectId: Schema.NullOr(Schema.String) }),
+    Request: Schema.Struct({
+      projectId: Schema.NullOr(Schema.String),
+      words: Schema.Array(Schema.String),
+      limit: Schema.Int,
+    }),
     Result: MemoryRow,
-    execute: ({ projectId }) =>
+    execute: ({ projectId, words, limit }) =>
       sql`
         SELECT
           memory_id AS "id",
@@ -69,9 +73,12 @@ const make = Effect.gen(function* () {
           source_thread_id AS "sourceThreadId",
           created_at AS "createdAt"
         FROM memory_entries
-        WHERE project_id IS NULL OR project_id = ${projectId}
+        WHERE ${sql.and([
+          sql`(project_id IS NULL OR project_id = ${projectId})`,
+          ...words.map((word) => sql`instr(lower(text), lower(${word})) > 0`),
+        ])}
         ORDER BY created_at DESC, memory_id DESC
-        LIMIT ${MEMORY_SCAN_LIMIT}
+        LIMIT ${limit}
       `,
   });
 
@@ -87,7 +94,7 @@ const make = Effect.gen(function* () {
     }),
 
     listVisible: Effect.fn("MemoryRepository.listVisible")(function (input) {
-      return listRows({ projectId: input.projectId }).pipe(
+      return listRows(input).pipe(
         NodeSqliteClient.readOnly,
         Effect.flatMap((rows) =>
           Effect.forEach(rows, (row) =>
