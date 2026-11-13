@@ -1,4 +1,8 @@
-import { type OrchestrationV2ProviderCapabilities, ProviderDriverKind } from "@t3tools/contracts";
+import {
+  type ChatAttachment,
+  type OrchestrationV2ProviderCapabilities,
+  ProviderDriverKind,
+} from "@t3tools/contracts";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 import {
   AcpProviderCapabilitiesV2,
@@ -12,6 +16,7 @@ import {
   type ProviderAdapterDriver,
   type ProviderAdapterDriverCreateInput,
 } from "@t3tools/provider-core/server/adapterDriver";
+import { isProviderNativeImageAttachment } from "@t3tools/provider-core/server/attachmentPrompt";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import type * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import type * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -26,11 +31,12 @@ import {
 } from "@t3tools/shared/nodeRuntime";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as EffectAcpSchema from "effect-acp/compat";
 import * as EffectAcpErrors from "effect-acp/errors";
 
 import {
@@ -67,6 +73,84 @@ export function apiChatPromptFailure(cause: unknown) {
   });
 }
 
+// A whole large file would crowd the conversation out of the model's context.
+const MAX_ATTACHED_TEXT_CHARS = 200_000;
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
+function readableText(bytes: Uint8Array): string | undefined {
+  try {
+    const text = utf8.decode(bytes);
+    return text.includes("\u0000") ? undefined : text;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The model cannot open files, so attachments travel in the prompt: images as images, and
+ * text files or the text of Office documents inline. Other files stay a named path.
+ */
+export const apiChatAttachmentBlocks = Effect.fn("ApiChatAdapter.attachmentBlocks")(
+  function* (input: {
+    readonly attachments: ReadonlyArray<ChatAttachment>;
+    readonly resolveAttachmentPath: (attachment: ChatAttachment) => string | null;
+    readonly resolveExtractedTextPath:
+      | ((path: string) => Effect.Effect<string | undefined>)
+      | undefined;
+  }) {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const blocks: Array<EffectAcpSchema.ContentBlock> = [];
+    for (const attachment of input.attachments) {
+      const saved = input.resolveAttachmentPath(attachment);
+      // The prompt text already says the attachment is unavailable.
+      if (saved === null) continue;
+      const image = isProviderNativeImageAttachment(attachment);
+      if (!image && attachment.type !== "file") continue;
+      const extracted =
+        image || input.resolveExtractedTextPath === undefined
+          ? undefined
+          : yield* input.resolveExtractedTextPath(saved);
+      const source = extracted ?? saved;
+      const bytes = yield* fileSystem
+        .readFile(source)
+        .pipe(
+          Effect.mapError(() =>
+            EffectAcpErrors.AcpRequestError.invalidParams(
+              `Could not read attachment '${attachment.name}'.`,
+            ),
+          ),
+        );
+      if (image) {
+        blocks.push({
+          type: "image",
+          mimeType: attachment.mimeType,
+          data: Buffer.from(bytes).toString("base64"),
+        });
+        continue;
+      }
+      const text = readableText(bytes);
+      if (text === undefined) continue;
+      const uri = yield* path.toFileUrl(saved).pipe(
+        Effect.map((url) => url.href),
+        Effect.orElseSucceed(() => attachment.name),
+      );
+      blocks.push({
+        type: "resource",
+        resource: {
+          uri,
+          mimeType: "text/plain",
+          text:
+            text.length > MAX_ATTACHED_TEXT_CHARS
+              ? `${text.slice(0, MAX_ATTACHED_TEXT_CHARS)}\n[File cut at ${MAX_ATTACHED_TEXT_CHARS} characters]`
+              : text,
+        },
+      });
+    }
+    return blocks;
+  },
+);
+
 interface ApiChatAdapterOptions {
   readonly settings: ApiChatSettings;
   readonly environment: NodeJS.ProcessEnv;
@@ -75,6 +159,11 @@ interface ApiChatAdapterOptions {
   readonly stateDir: string;
   /** The model a thread without a selection runs, read from the provider snapshot. */
   readonly defaultModel: Effect.Effect<string | undefined>;
+  readonly resolveExtractedTextPath:
+    | ((path: string) => Effect.Effect<string | undefined>)
+    | undefined;
+  readonly fileSystem: FileSystem.FileSystem;
+  readonly path: Path.Path;
 }
 
 function makeApiChatAdapterFlavor(options: ApiChatAdapterOptions): AcpAdapterV2Flavor {
@@ -111,6 +200,15 @@ function makeApiChatAdapterFlavor(options: ApiChatAdapterOptions): AcpAdapterV2F
     // The agent's only tools are T3's, over HTTP.
     mcpOverHttp: true,
     promptFailure: apiChatPromptFailure,
+    buildAttachmentPrompt: ({ attachments, resolveAttachmentPath }) =>
+      apiChatAttachmentBlocks({
+        attachments,
+        resolveAttachmentPath,
+        resolveExtractedTextPath: options.resolveExtractedTextPath,
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, options.fileSystem),
+        Effect.provideService(Path.Path, options.path),
+      ),
     // Any session takes `session/set_model`, though `session/new` lists no models.
     modelOptionArrivesLate: true,
     applyModelSelection: Effect.fn("ApiChatAdapter.applyModelSelection")(function* ({
@@ -146,6 +244,7 @@ export const makeApiChatAdapterDriver = (
     function* (input: ProviderAdapterDriverCreateInput<ApiChatSettings>) {
       const host = yield* ProviderHost.ProviderHost;
       const path = yield* Path.Path;
+      const fileSystem = yield* FileSystem.FileSystem;
       const selfInvocation = yield* resolveSelfInvocation();
       const providerEventLoggers = yield* ProviderEventLoggers.ProviderEventLoggers;
       const makeNativeLogger = yield* makeAcpNativeLoggerFactory();
@@ -160,6 +259,9 @@ export const makeApiChatAdapterDriver = (
           selfInvocation,
           stateDir: path.join(host.paths.stateDir, "api-chat"),
           defaultModel,
+          resolveExtractedTextPath: host.resolveExtractedTextPath,
+          fileSystem,
+          path,
         }),
         selfInvocation,
         nativeLogging: (threadId) =>

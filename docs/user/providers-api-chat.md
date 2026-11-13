@@ -25,7 +25,8 @@ newest. When a service lists no models, or lists one under another name, add its
 ## What It Can Do
 
 - Replies stream in as the model writes them. Stop keeps what was already written.
-- Pasted images and attached files go to the model. Models that cannot read images refuse them.
+- Pasted images, text files, and the text of Word, Excel, and PowerPoint documents go to the model.
+  Other files, such as PDFs, are not read yet. Models that cannot read images refuse them.
 - The model can use T3 Code's own tools, including shared memory, so what you tell one agent is
   there when you chat here.
 - A rate limit or spent quota counts as a usage limit, so a thread can

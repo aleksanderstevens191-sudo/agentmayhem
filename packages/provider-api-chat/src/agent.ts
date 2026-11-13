@@ -298,6 +298,8 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
     const controller = new AbortController();
     session.running = controller;
     const firstTurn = session.turns.length;
+    // Turns that stay if the prompt fails: none, until a tool has run.
+    let keptTurns = firstTurn;
     session.turns.push({ role: "user", content: userParts(blocks) });
     try {
       const toolbox = await toolboxFor(session);
@@ -387,14 +389,17 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
             content: [{ type: "content", content: { type: "text", text } }],
           });
         }
+        keptTurns = session.turns.length;
         if (controller.signal.aborted) {
           await save(session);
           return { stopReason: "cancelled" };
         }
       }
     } catch (error) {
-      // A failed prompt leaves no trace, so retrying it doesn't send it twice.
-      session.turns.length = firstTurn;
+      // A prompt that failed before any tool ran leaves no trace, so a retry doesn't send it twice.
+      // Tool rounds that ran stay, since what a tool did can't be taken back.
+      session.turns.length = keptTurns;
+      if (keptTurns > firstTurn) await save(session).catch(() => undefined);
       throw toRpcError(error);
     } finally {
       session.running = undefined;

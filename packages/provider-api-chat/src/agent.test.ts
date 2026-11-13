@@ -87,6 +87,79 @@ async function withStateDir(use: (stateDir: string) => Promise<void>) {
 
 const requestBody = (init: RequestInit | undefined) => JSON.parse(String(init?.body)) as Message;
 
+const MCP_URL = "http://mcp.test/mcp";
+const mcpServers = [
+  {
+    type: "http",
+    name: "t3-code",
+    url: MCP_URL,
+    headers: [{ name: "Authorization", value: "Bearer mcp-token" }],
+  },
+];
+
+/** Stands in for T3's MCP server, with one memory tool. */
+function fakeMcpServer(body: Message | undefined): Response {
+  switch (body?.method) {
+    case "initialize":
+      return Response.json(
+        {
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { protocolVersion: "2025-06-18", capabilities: {} },
+        },
+        { headers: { "mcp-session-id": "mcp-1" } },
+      );
+    case "tools/list":
+      return Response.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: {
+          tools: [
+            {
+              name: "memory_search",
+              description: "Search shared memory",
+              inputSchema: {
+                $schema: "https://json-schema.org/draft/2020-12/schema",
+                type: "object",
+                properties: { query: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+    case "tools/call":
+      return sse([
+        {
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text: "Ship normal chat." }] },
+        },
+      ]);
+    default:
+      return new Response(null, { status: 202 });
+  }
+}
+
+const chatToolCall = () =>
+  sse([
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                function: { name: "memory_search", arguments: '{"query":"plans"}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    },
+  ]);
+
 describe("runApiChatAgent", () => {
   it("runs the session's MCP tools, then replays the saved conversation on load", () =>
     withStateDir(async (stateDir) => {
@@ -94,87 +167,19 @@ describe("runApiChatAgent", () => {
       const mcpRequests: Array<{ readonly body: Message | undefined; readonly headers: Headers }> =
         [];
       const fakeFetch: typeof fetch = async (url, init) => {
-        if (String(url) === "http://mcp.test/mcp") {
-          const headers = new Headers(init?.headers);
+        if (String(url) === MCP_URL) {
           const body = init?.method === "POST" ? requestBody(init) : undefined;
-          mcpRequests.push({ body, headers });
-          switch (body?.method) {
-            case "initialize":
-              return Response.json(
-                {
-                  jsonrpc: "2.0",
-                  id: body.id,
-                  result: { protocolVersion: "2025-06-18", capabilities: {} },
-                },
-                { headers: { "mcp-session-id": "mcp-1" } },
-              );
-            case "tools/list":
-              return Response.json({
-                jsonrpc: "2.0",
-                id: body.id,
-                result: {
-                  tools: [
-                    {
-                      name: "memory_search",
-                      description: "Search shared memory",
-                      inputSchema: {
-                        $schema: "https://json-schema.org/draft/2020-12/schema",
-                        type: "object",
-                        properties: { query: { type: "string" } },
-                      },
-                    },
-                  ],
-                },
-              });
-            case "tools/call":
-              return sse([
-                {
-                  jsonrpc: "2.0",
-                  id: body.id,
-                  result: { content: [{ type: "text", text: "Ship normal chat." }] },
-                },
-              ]);
-            default:
-              return new Response(null, { status: 202 });
-          }
+          mcpRequests.push({ body, headers: new Headers(init?.headers) });
+          return fakeMcpServer(body);
         }
         assert.strictEqual(String(url), "https://api.test/v1/chat/completions");
         chatBodies.push(requestBody(init));
-        return chatBodies.length === 1
-          ? sse([
-              {
-                choices: [
-                  {
-                    delta: {
-                      tool_calls: [
-                        {
-                          index: 0,
-                          id: "call_1",
-                          function: { name: "memory_search", arguments: '{"query":"plans"}' },
-                        },
-                      ],
-                    },
-                    finish_reason: "tool_calls",
-                  },
-                ],
-              },
-            ])
-          : chatText("You planned normal chat.");
+        return chatBodies.length === 1 ? chatToolCall() : chatText("You planned normal chat.");
       };
 
       const agent = startAgent({ fetch: fakeFetch, stateDir });
       await agent.request("initialize", { protocolVersion: 1 });
-      const created = await agent.request("session/new", {
-        cwd: stateDir,
-        mcpServers: [
-          {
-            type: "http",
-            name: "t3-code",
-            url: "http://mcp.test/mcp",
-            headers: [{ name: "Authorization", value: "Bearer mcp-token" }],
-          },
-        ],
-      });
+      const created = await agent.request("session/new", { cwd: stateDir, mcpServers });
       const sessionId = created.result.sessionId as string;
       await agent.request("session/set_model", { sessionId, modelId: "gpt-test" });
       const prompted = await agent.request("session/prompt", {
@@ -242,20 +247,31 @@ describe("runApiChatAgent", () => {
       await restarted.stop();
     }));
 
-  it("answers a rate limit with the usage-limit code and leaves the prompt out of the history", () =>
+  it("answers a rate limit with the usage-limit code, dropping the prompt unless a tool ran", () =>
     withStateDir(async (stateDir) => {
       const chatBodies: Array<Message> = [];
-      const fakeFetch: typeof fetch = async (_url, init) => {
+      const rateLimited = () =>
+        Response.json(
+          { error: { type: "rate_limit_error", message: "Too many requests" } },
+          { status: 429, headers: { "retry-after": "60" } },
+        );
+      const fakeFetch: typeof fetch = async (url, init) => {
+        if (String(url) === MCP_URL) {
+          return fakeMcpServer(init?.method === "POST" ? requestBody(init) : undefined);
+        }
         chatBodies.push(requestBody(init));
-        return chatBodies.length === 1
-          ? Response.json(
-              { error: { type: "rate_limit_error", message: "Too many requests" } },
-              { status: 429, headers: { "retry-after": "60" } },
-            )
-          : chatText("Hello again.");
+        switch (chatBodies.length) {
+          case 1:
+          case 3:
+            return rateLimited();
+          case 2:
+            return chatToolCall();
+          default:
+            return chatText("Hello again.");
+        }
       };
       const agent = startAgent({ fetch: fakeFetch, stateDir });
-      const { result } = await agent.request("session/new", { cwd: stateDir, mcpServers: [] });
+      const { result } = await agent.request("session/new", { cwd: stateDir, mcpServers });
       await agent.request("session/set_model", {
         sessionId: result.sessionId,
         modelId: "gpt-test",
@@ -271,11 +287,25 @@ describe("runApiChatAgent", () => {
       );
       assert.isString(limited.error.data.resetAt);
 
-      await agent.request("session/prompt", {
+      const afterTool = await agent.request("session/prompt", {
         sessionId: result.sessionId,
         prompt: [{ type: "text", text: "Second" }],
       });
       assert.deepEqual(chatBodies[1]?.messages, [{ role: "user", content: "Second" }]);
+      assert.strictEqual(afterTool.error.code, -32029);
+
+      await agent.request("session/prompt", {
+        sessionId: result.sessionId,
+        prompt: [{ type: "text", text: "Third" }],
+      });
+      const kept = chatBodies[3]?.messages as Array<Message>;
+      assert.deepEqual(
+        kept.map((message) => message.role),
+        ["user", "assistant", "tool", "user"],
+        "the tool that ran stays in the history",
+      );
+      assert.strictEqual(kept[2]?.content, "Ship normal chat.");
+      assert.strictEqual(kept[3]?.content, "Third");
       await agent.stop();
     }));
 
