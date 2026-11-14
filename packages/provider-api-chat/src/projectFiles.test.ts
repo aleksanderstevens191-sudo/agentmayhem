@@ -57,7 +57,7 @@ describe("callProjectFileTool", () => {
 });
 
 describe("projectSystemPrompt", () => {
-  it("carries AGENTS.md, or CLAUDE.md when the project has only that", () =>
+  it("carries AGENTS.md, or CLAUDE.md when AGENTS.md is missing or leads outside", () =>
     withProject(async (root) => {
       assert.notInclude(await projectSystemPrompt(root), "project_instructions");
       await NodeFSP.writeFile(NodePath.join(root, "CLAUDE.md"), "Use British spelling.");
@@ -65,6 +65,11 @@ describe("projectSystemPrompt", () => {
         await projectSystemPrompt(root),
         "from its CLAUDE.md:\n\n<project_instructions>\nUse British spelling.\n</project_instructions>",
       );
+      await NodeFSP.symlink(NodePath.join(root, "link.txt"), NodePath.join(root, "AGENTS.md"));
+      const linkedOut = await projectSystemPrompt(root);
+      assert.notInclude(linkedOut, "Not yours.");
+      assert.include(linkedOut, "from its CLAUDE.md");
+      await NodeFSP.rm(NodePath.join(root, "AGENTS.md"));
       await NodeFSP.writeFile(NodePath.join(root, "AGENTS.md"), "Answer in French.");
       assert.include(await projectSystemPrompt(root), "from its AGENTS.md");
     }));

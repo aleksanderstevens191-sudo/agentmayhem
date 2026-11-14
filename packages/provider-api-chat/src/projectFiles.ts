@@ -127,10 +127,9 @@ export async function callProjectFileTool(
 export async function projectSystemPrompt(root: string): Promise<string> {
   const intro = `The user's project folder is ${root}. Use list_files and read_file to look at its files when they would help.`;
   for (const file of INSTRUCTION_FILES) {
-    const text = await NodeFSP.readFile(NodePath.join(root, file), "utf8").then(
-      (contents) => contents.trim(),
-      () => "",
-    );
+    // Read like read_file, so a linked instructions file can't pull in text from outside.
+    const read = await callProjectFileTool(root, "read_file", { path: file });
+    const text = read === undefined || read.isError ? "" : read.text.trim();
     if (!text) continue;
     return `${intro}\n\nFollow the project's instructions, from its ${file}:\n\n<project_instructions>\n${cut(text, MAX_INSTRUCTIONS_CHARS)}\n</project_instructions>`;
   }
