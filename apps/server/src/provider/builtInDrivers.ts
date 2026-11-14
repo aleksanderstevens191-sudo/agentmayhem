@@ -16,10 +16,12 @@ import type {
   ProviderUsageReaderEnv,
 } from "@t3tools/provider-core/server/driver";
 import { KiroDriver, type KiroDriverEnv } from "@t3tools/provider-kiro/server";
+import { ApiChatDriver, type ApiChatDriverEnv } from "@t3tools/provider-api-chat/server";
 
 export type BuiltInDriversEnv =
   | AcpRegistryDriverEnv
   | AntigravityDriverEnv
+  | ApiChatDriverEnv
   | ClaudeDriverEnv
   | CodexDriverEnv
   | CursorDriverEnv
@@ -41,6 +43,7 @@ export const BUILT_IN_DRIVERS: ReadonlyArray<AnyProviderDriver<BuiltInDriversEnv
   KiroDriver,
   PiDriver,
   MuseDriver,
+  ApiChatDriver,
   AcpRegistryDriver,
 ];
 
