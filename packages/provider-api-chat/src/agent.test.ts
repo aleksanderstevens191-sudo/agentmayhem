@@ -86,6 +86,9 @@ async function withStateDir(use: (stateDir: string) => Promise<void>) {
 }
 
 const requestBody = (init: RequestInit | undefined) => JSON.parse(String(init?.body)) as Message;
+/** A request's conversation, without the system prompt every chat in a folder gets. */
+const conversation = (body: Message | undefined) =>
+  ((body?.messages ?? []) as Array<Message>).filter((message) => message.role !== "system");
 
 const MCP_URL = "http://mcp.test/mcp";
 const mcpServers = [
@@ -177,9 +180,12 @@ describe("runApiChatAgent", () => {
         return chatBodies.length === 1 ? chatToolCall() : chatText("You planned normal chat.");
       };
 
+      const project = NodePath.join(stateDir, "project");
+      await NodeFSP.mkdir(project);
+      await NodeFSP.writeFile(NodePath.join(project, "AGENTS.md"), "Answer in French.\n");
       const agent = startAgent({ fetch: fakeFetch, stateDir });
       await agent.request("initialize", { protocolVersion: 1 });
-      const created = await agent.request("session/new", { cwd: stateDir, mcpServers });
+      const created = await agent.request("session/new", { cwd: project, mcpServers });
       const sessionId = created.result.sessionId as string;
       await agent.request("session/set_model", { sessionId, modelId: "gpt-test" });
       const prompted = await agent.request("session/prompt", {
@@ -207,16 +213,24 @@ describe("runApiChatAgent", () => {
           content: { type: "text", text: "You planned normal chat." },
         },
       ]);
-      assert.deepEqual(chatBodies[0]?.tools, [
-        {
-          type: "function",
-          function: {
-            name: "memory_search",
-            description: "Search shared memory",
-            parameters: { type: "object", properties: { query: { type: "string" } } },
-          },
+      assert.deepEqual(chatBodies[0]?.tools.at(-1), {
+        type: "function",
+        function: {
+          name: "memory_search",
+          description: "Search shared memory",
+          parameters: { type: "object", properties: { query: { type: "string" } } },
         },
-      ]);
+      });
+      assert.deepEqual(
+        chatBodies[0]?.tools.map((tool: Message) => tool.function.name),
+        ["list_files", "read_file", "memory_search"],
+        "the project's files come first",
+      );
+      assert.strictEqual(chatBodies[0]?.messages[0].role, "system");
+      assert.include(
+        chatBodies[0]?.messages[0].content,
+        "<project_instructions>\nAnswer in French.\n</project_instructions>",
+      );
       assert.deepEqual(chatBodies[1]?.messages.at(-1), {
         role: "tool",
         tool_call_id: "call_1",
@@ -291,14 +305,14 @@ describe("runApiChatAgent", () => {
         sessionId: result.sessionId,
         prompt: [{ type: "text", text: "Second" }],
       });
-      assert.deepEqual(chatBodies[1]?.messages, [{ role: "user", content: "Second" }]);
+      assert.deepEqual(conversation(chatBodies[1]), [{ role: "user", content: "Second" }]);
       assert.strictEqual(afterTool.error.code, -32029);
 
       await agent.request("session/prompt", {
         sessionId: result.sessionId,
         prompt: [{ type: "text", text: "Third" }],
       });
-      const kept = chatBodies[3]?.messages as Array<Message>;
+      const kept = conversation(chatBodies[3]);
       assert.deepEqual(
         kept.map((message) => message.role),
         ["user", "assistant", "tool", "user"],
@@ -345,7 +359,7 @@ describe("runApiChatAgent", () => {
         sessionId,
         prompt: [{ type: "text", text: "Go on" }],
       });
-      assert.deepEqual(chatBodies[1]?.messages, [
+      assert.deepEqual(conversation(chatBodies[1]), [
         { role: "user", content: "Tell me a story" },
         { role: "assistant", content: "Partial" },
         { role: "user", content: "Go on" },

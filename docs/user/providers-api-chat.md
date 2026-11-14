@@ -1,8 +1,9 @@
 # API Chat
 
 API chat talks to a model through its API with your own key, so nothing has to be installed. It
-fits plain conversation: asking questions, drafting, and talking through ideas. It cannot read or
-edit files or run commands. For coding work, use an agent such as Claude or Codex.
+fits plain conversation: asking questions, drafting, and talking through ideas. It can read the
+project's files but cannot change them or run commands. For coding work, use an agent such as
+Claude or Codex.
 
 ## Set Up API Chat
 
@@ -27,6 +28,8 @@ newest. When a service lists no models, or lists one under another name, add its
 - Replies stream in as the model writes them. Stop keeps what was already written.
 - Pasted images, text files, and the text of Word, Excel, and PowerPoint documents go to the model.
   Other files, such as PDFs, are not read yet. Models that cannot read images refuse them.
+- The model follows the thread's [project instructions](./project-settings.md#project-instructions)
+  and can list and read the project's text files.
 - The model can use T3 Code's own tools, including shared memory, so what you tell one agent is
   there when you chat here.
 - A rate limit or spent quota counts as a usage limit, so a thread can

@@ -200,8 +200,15 @@ describe("describeFailure", () => {
 describe("replyRequestBody", () => {
   const tools = [{ name: "memory_search", description: "Search", inputSchema: { type: "object" } }];
 
-  it("puts Anthropic tool results and the next prompt in one user message", () => {
-    const body = replyRequestBody({ format: "anthropic", model: "m", turns: TOOL_TURNS, tools });
+  it("puts the system prompt first and Anthropic tool results with the next prompt", () => {
+    const body = replyRequestBody({
+      format: "anthropic",
+      model: "m",
+      system: "Answer in French.",
+      turns: TOOL_TURNS,
+      tools,
+    });
+    assert.strictEqual(body.system, "Answer in French.");
     assert.deepEqual(body.messages, [
       { role: "user", content: [{ type: "text", text: "What do you remember?" }] },
       {
@@ -225,8 +232,15 @@ describe("replyRequestBody", () => {
   });
 
   it("sends OpenAI tool calls back with the fields the service attached", () => {
-    const body = replyRequestBody({ format: "openai", model: "m", turns: TOOL_TURNS, tools });
+    const body = replyRequestBody({
+      format: "openai",
+      model: "m",
+      system: "Answer in French.",
+      turns: TOOL_TURNS,
+      tools,
+    });
     assert.deepEqual(body.messages, [
+      { role: "system", content: "Answer in French." },
       { role: "user", content: "What do you remember?" },
       {
         role: "assistant",

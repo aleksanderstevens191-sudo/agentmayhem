@@ -45,6 +45,7 @@ import {
   API_CHAT_SERVICE_VARIABLE,
   API_CHAT_STATE_DIR_VARIABLE,
 } from "../agent.ts";
+import { readableText } from "../projectFiles.ts";
 import { API_CHAT_USAGE_LIMIT_CODE } from "../services.ts";
 import { ApiChatSettings } from "../settings.ts";
 
@@ -75,16 +76,6 @@ export function apiChatPromptFailure(cause: unknown) {
 
 // A whole large file would crowd the conversation out of the model's context.
 const MAX_ATTACHED_TEXT_CHARS = 200_000;
-const utf8 = new TextDecoder("utf-8", { fatal: true });
-
-function readableText(bytes: Uint8Array): string | undefined {
-  try {
-    const text = utf8.decode(bytes);
-    return text.includes("\u0000") ? undefined : text;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * The model cannot open files, so attachments travel in the prompt: images as images, and
