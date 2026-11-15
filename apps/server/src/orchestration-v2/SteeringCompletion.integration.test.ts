@@ -1280,6 +1280,40 @@ it.effect(
     ),
 );
 
+it.effect("names the agent that sent a steering message", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { started, steered, layer, startFirstTurn } =
+        yield* nextTurnSelectionHarness("steering-agent-sender");
+      yield* Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+        const threadId = yield* startFirstTurn;
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make("steer-from-agent"),
+          threadId,
+          messageId: MessageId.make("message:steer-from-agent"),
+          text: "Status?",
+          attachments: [],
+          dispatchMode: { type: "steer_active", targetRunId: started[0]!.runId },
+          createdBy: "agent",
+          creationSource: "mcp",
+          senderThreadId: ThreadId.make("thread:asker"),
+        });
+        yield* worker.drain();
+        assert.lengthOf(steered, 1);
+        assert.isTrue(
+          steered[0]!.startsWith(
+            "<t3_agent_message>From the agent in thread (threadId `thread:asker`), not from the user.",
+          ),
+        );
+        assert.isTrue(steered[0]!.endsWith("\n\nStatus?"));
+      }).pipe(Effect.provide(layer));
+    }),
+  ),
+);
+
 it.effect("restarts the turn for an image when native steering takes text only", () =>
   Effect.scoped(
     Effect.gen(function* () {
