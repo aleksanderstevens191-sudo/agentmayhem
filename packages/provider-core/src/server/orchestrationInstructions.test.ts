@@ -5,6 +5,7 @@ import {
   T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH,
   T3_CODE_ORCHESTRATION_INSTRUCTIONS,
   t3AcpPromptWithInstructions,
+  t3AgentMessagePrompt,
   t3OrchestrationPrompt,
   t3OrchestrationSystemPrompt,
 } from "./orchestrationInstructions.ts";
@@ -81,5 +82,28 @@ describe("T3 device instructions", () => {
       "Again.",
     );
     assert.notInclude(t3AcpPromptWithInstructions({ prompt: "Hi.", state }), "## T3 Code devices");
+  });
+});
+
+describe("T3 agent messages", () => {
+  it("name the sending thread, and its machine when linked, ahead of the message", () => {
+    const local = t3AgentMessagePrompt("Is the build green?", {
+      threadId: "thread-1",
+      title: 'Release "v2"',
+    });
+    assert.include(local, 'From the agent in thread "Release \\"v2\\"" (threadId `thread-1`)');
+    assert.isTrue(local.endsWith("\n\nIs the build green?"));
+    assert.include(
+      t3AgentMessagePrompt("Is the build green?", {
+        threadId: "thread-1",
+        title: "Release",
+        environmentId: "env-2",
+      }),
+      "(threadId `thread-1`, environmentId `env-2`)",
+    );
+  });
+
+  it("leave a native slash command at the start of the prompt", () => {
+    assert.equal(t3AgentMessagePrompt("/compact", { threadId: "thread-1" }), "/compact");
   });
 });

@@ -51,8 +51,10 @@ import {
   latestNativeContextUsage,
 } from "@t3tools/provider-core/server/handoffBudget";
 import { deliverContextHandoffs, withInlineContext } from "./ContextHandoffDelivery.ts";
+import { agentMessageSender } from "./agentMessageSender.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
+import { t3AgentMessagePrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import {
@@ -746,10 +748,26 @@ export const layer: Layer.Layer<
       });
       let effectiveHandoffs = handoffs;
       let resumeFellBack = false;
-      const userText = projectComposerContextForProvider({
+      const composedText = projectComposerContextForProvider({
         text: message.text,
         records: message.context?.records ?? [],
       });
+      const sender = agentMessageSender(message, projection.thread);
+      const userText =
+        sender === undefined
+          ? composedText
+          : t3AgentMessagePrompt(
+              composedText,
+              "title" in sender
+                ? sender
+                : {
+                    threadId: sender.threadId,
+                    title: yield* projectionStore.getThread(sender.threadId).pipe(
+                      Effect.map((thread) => thread.title),
+                      Effect.orElseSucceed(() => undefined),
+                    ),
+                  },
+            );
       // Native goal commands go verbatim; handoff history waits a turn.
       const goalDriver =
         session.driver === "codex" ||

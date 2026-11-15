@@ -347,6 +347,10 @@ current title and opens it when selected. Your prompt only carries a reference: 
 history on demand, so attaching a long thread costs nothing until the agent looks. Attaching a
 thread does not change it, and the agent cannot send messages to it unless you ask.
 
+When you ask, the agent messages that thread, and the thread's own agent, on any provider, works
+on it there. The message shows the sending thread's name, and the receiving agent is told which
+thread sent it, so it can answer back when the message asks for an answer.
+
 A thread from a linked machine, picked, pasted or dropped, stays a reference that the agent reads
 on that machine. A pasted link to a thread on any other machine stays a link. Dropping a thread
 from any other environment attaches a saved transcript file. The source
