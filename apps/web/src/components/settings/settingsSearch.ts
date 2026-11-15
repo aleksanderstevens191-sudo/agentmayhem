@@ -1232,6 +1232,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "project-defaults",
   },
   {
+    id: "project-instructions",
+    title: "Project instructions",
+    to: "/settings/projects",
+    searchTerms: ["agents.md claude.md custom instructions prompt system knowledge"],
+  },
+  {
     id: "project-actions",
     title: "Actions",
     to: "/settings/projects",

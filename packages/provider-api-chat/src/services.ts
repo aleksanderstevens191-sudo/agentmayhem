@@ -405,6 +405,7 @@ function withToolTurnsAsText(turns: ReadonlyArray<ChatTurn>): ReadonlyArray<Chat
 export function replyRequestBody(input: {
   readonly format: ApiChatFormat;
   readonly model: string;
+  readonly system?: string | undefined;
   readonly turns: ReadonlyArray<ChatTurn>;
   readonly tools: ReadonlyArray<ChatTool>;
 }): Record<string, unknown> {
@@ -413,6 +414,7 @@ export function replyRequestBody(input: {
     return {
       model: input.model,
       max_tokens: ANTHROPIC_MAX_TOKENS,
+      ...(input.system ? { system: input.system } : {}),
       messages: anthropicMessages(turns),
       ...(input.tools.length === 0
         ? {}
@@ -428,7 +430,10 @@ export function replyRequestBody(input: {
   }
   return {
     model: input.model,
-    messages: openAiMessages(turns),
+    messages: [
+      ...(input.system ? [{ role: "system", content: input.system }] : []),
+      ...openAiMessages(turns),
+    ],
     ...(input.tools.length === 0
       ? {}
       : {
@@ -577,6 +582,7 @@ export function makeReplyReader(
 export async function streamApiChatReply(input: {
   readonly connection: ApiChatConnection;
   readonly model: string;
+  readonly system?: string | undefined;
   readonly turns: ReadonlyArray<ChatTurn>;
   readonly tools: ReadonlyArray<ChatTool>;
   readonly onDelta: (delta: ApiChatDelta) => void;
@@ -593,6 +599,7 @@ export async function streamApiChatReply(input: {
       body: replyRequestBody({
         format: connection.format,
         model: input.model,
+        system: input.system,
         turns: input.turns,
         tools: input.tools,
       }),

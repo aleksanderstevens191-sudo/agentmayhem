@@ -46,6 +46,19 @@ Settings that are environment-wide stay read-only while a project is selected. W
 targets disagree, a control shows **Mixed** until you choose one value. Appearance, keyboard,
 and other phone-only settings ignore the filter.
 
+## Project instructions
+
+Write what every agent in a project should know, such as who you are, what the project is for, or
+how to answer, under **Settings → Projects → Instructions**. They are saved as `AGENTS.md` in the
+project's folder, which most agents read at the start of each session. If the folder has no
+`CLAUDE.md`, T3 Code adds one that points to `AGENTS.md`, so Claude reads the same instructions.
+API chat reads them before every message, and Claude, Codex and the other agents pick up an edit in
+their next session. When a project has checkouts on several machines, pick one in the scope line
+to choose which checkout's `AGENTS.md` the box edits.
+
+Files you keep in the project's folder are the project's files. Coding agents and API chat can read
+them, and new worktrees only get files that are committed.
+
 ## Pin and archive projects
 
 Pinned projects come first in the project pickers: the project picker on a new thread, the

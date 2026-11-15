@@ -51,6 +51,7 @@ import {
 } from "./ProjectFaviconPickerDialog";
 import { ProjectActionsSettings } from "./ProjectActionsSettings";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { ProjectInstructionsSettings } from "./ProjectInstructionsSettings";
 import {
   defaultProjectIcon,
   hasDefaultProjectIcon,
@@ -651,6 +652,11 @@ function ProjectDetail({
             </>
           ) : null}
         </SettingsSection>
+        <ProjectInstructionsSettings
+          key={`${filePickerProject.environmentId}:${filePickerProject.workspaceRoot}`}
+          environmentId={filePickerProject.environmentId}
+          cwd={filePickerProject.workspaceRoot}
+        />
         <ProjectDefaultsSettings category="project" />
         <ProjectActionsSettings />
         {checkoutChoices}

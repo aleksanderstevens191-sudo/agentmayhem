@@ -10,6 +10,7 @@ import * as NodePath from "node:path";
 import * as NodeReadline from "node:readline";
 
 import { connectMcpServer, type McpHttpServer, type McpToolResult } from "./mcp.ts";
+import { callProjectFileTool, PROJECT_FILE_TOOLS, projectSystemPrompt } from "./projectFiles.ts";
 import {
   API_CHAT_KEY_VARIABLE,
   API_CHAT_USAGE_LIMIT_CODE,
@@ -46,6 +47,8 @@ interface Toolbox {
 
 interface Session {
   readonly id: string;
+  /** The thread's project folder, which the model reads through the project file tools. */
+  readonly cwd: string | undefined;
   model: string;
   turns: Array<ChatTurn>;
   servers: ReadonlyArray<McpHttpServer>;
@@ -124,6 +127,11 @@ function userParts(blocks: unknown): ReadonlyArray<UserPart> {
     }
   }
   return parts.length > 0 ? parts : [{ type: "text", text: "(empty message)" }];
+}
+
+/** ACP sends an absolute `cwd`; anything else leaves the chat without project files. */
+function projectFolder(value: unknown): string | undefined {
+  return typeof value === "string" && NodePath.isAbsolute(value) ? value : undefined;
 }
 
 function parseToolArguments(text: string): Record<string, unknown> {
@@ -214,21 +222,25 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
         }),
       ),
     ).then((connections) => {
+      const { cwd } = session;
+      const tools: Array<ChatTool> = cwd === undefined ? [] : [...PROJECT_FILE_TOOLS];
       const owners = new Map<string, NonNullable<(typeof connections)[number]>>();
-      const tools: Array<ChatTool> = [];
       for (const connection of connections) {
         for (const tool of connection?.tools ?? []) {
-          if (connection === undefined || owners.has(tool.name)) continue;
+          if (connection === undefined || tools.some(({ name }) => name === tool.name)) continue;
           owners.set(tool.name, connection);
           tools.push(tool);
         }
       }
       return {
         tools,
-        call: (name, args, signal) => {
+        call: async (name, args, signal) => {
+          const projectResult =
+            cwd === undefined ? undefined : await callProjectFileTool(cwd, name, args);
+          if (projectResult !== undefined) return projectResult;
           const owner = owners.get(name);
           return owner === undefined
-            ? Promise.resolve({ text: `There is no tool named ${name}.`, isError: true })
+            ? { text: `There is no tool named ${name}.`, isError: true }
             : owner.call(name, args, signal);
         },
         close: async () => {
@@ -303,6 +315,8 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
     session.turns.push({ role: "user", content: userParts(blocks) });
     try {
       const toolbox = await toolboxFor(session);
+      // Read on every prompt, so an edit to the instructions applies to the next message.
+      const system = session.cwd === undefined ? undefined : await projectSystemPrompt(session.cwd);
       for (let round = 0; ; round += 1) {
         if (round === MAX_TOOL_ROUNDS) {
           const text = `Stopped after ${MAX_TOOL_ROUNDS} rounds of tool calls in one reply.`;
@@ -320,6 +334,7 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
           reply = await streamApiChatReply({
             connection,
             model: session.model,
+            system,
             turns: session.turns,
             tools: toolbox.tools,
             signal: controller.signal,
@@ -430,6 +445,7 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
         const id = NodeCrypto.randomUUID();
         sessions.set(id, {
           id,
+          cwd: projectFolder(params.cwd),
           model: "",
           turns: [],
           servers: httpMcpServers(params.mcpServers),
@@ -445,6 +461,7 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
         const stored = await load(id);
         const session: Session = {
           id,
+          cwd: projectFolder(params.cwd),
           ...stored,
           servers: httpMcpServers(params.mcpServers),
           toolbox: undefined,
