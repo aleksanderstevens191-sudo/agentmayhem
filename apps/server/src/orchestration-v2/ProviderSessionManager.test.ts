@@ -2526,6 +2526,56 @@ it.effect(
     }),
 );
 
+it.effect("ProviderSessionManagerV2 gives a session the plugins the user turned on", () =>
+  Effect.gen(function* () {
+    const state = yield* Ref.make(emptyState);
+    const mcpConfigs = yield* Ref.make<
+      ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
+    >([]);
+    const computerControl = {
+      name: "computer-control",
+      enabled: true,
+      server: { type: "stdio", command: "npx", args: ["-y", "@steipete/peekaboo", "mcp"] },
+    } as const;
+    yield* Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const threadId = ThreadId.make("thread-provider-session-manager-plugins");
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now })],
+      });
+      yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+
+      assert.deepEqual((yield* Ref.get(mcpConfigs))[0]?.plugins, [computerControl]);
+      yield* manager.close(providerSessionId);
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          state,
+          idleTimeoutMs: 1_000,
+          mcpConfigs,
+          serverSettingsLayer: ServerSettings.layerTest({
+            agentPlugins: [
+              computerControl,
+              {
+                name: "docs",
+                enabled: false,
+                server: { type: "http", url: "https://docs.test/mcp" },
+              },
+            ],
+          }).pipe(Layer.orDie),
+        }),
+      ),
+    );
+  }),
+);
+
 it.effect("ProviderSessionManagerV2 honors a project browser-access opt-out", () =>
   Effect.gen(function* () {
     const captured = yield* runBrowserAccessScenario({

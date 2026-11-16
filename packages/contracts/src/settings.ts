@@ -21,6 +21,7 @@ import {
   TrimmedString,
 } from "./baseSchemas.ts";
 import { UsageLimitSourceId } from "./usageLimitSourceId.ts";
+import { AgentPlugin, AgentPlugins } from "./agentPlugins.ts";
 import { UsageModelFilter } from "./usage.ts";
 import { SecretProviderId, SecretProviderSlug } from "./secretReference.ts";
 import { SettingsSecretValue } from "./settingsSecretValue.ts";
@@ -1447,6 +1448,7 @@ export const ServerSettings = Schema.Struct({
   usageLimitFallbacks: Schema.Array(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  agentPlugins: AgentPlugins.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   snoozePresets: SnoozePresetSettings.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SNOOZE_PRESETS)),
   ),
@@ -1889,6 +1891,7 @@ export const ServerSettingsPatch = Schema.Struct({
   autoResumeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   snoozeLimitedThreads: Schema.optionalKey(Schema.Boolean),
   usageLimitFallbacks: Schema.optionalKey(Schema.Array(ModelSelection)),
+  agentPlugins: Schema.optionalKey(Schema.Array(AgentPlugin)),
   snoozePresets: Schema.optionalKey(SnoozePresetSettings),
   hiddenThreadTags: Schema.optionalKey(Schema.Array(Schema.String)),
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
@@ -1971,12 +1974,14 @@ export function requiredScopesForServerSettingsPatch(
   let changesSettings = false;
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
+    // A plugin is a program every agent starts, like a provider binary.
     if (
       key === "providers" ||
       key === "providerInstances" ||
       key === "usageLimitSources" ||
       key === "textGenerators" ||
-      key === "secretProviders"
+      key === "secretProviders" ||
+      key === "agentPlugins"
     ) {
       changesProviders = true;
     } else {

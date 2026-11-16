@@ -2262,6 +2262,7 @@ export function claudeMcpQueryOverrides(input: {
         },
         timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
       },
+      ...McpProviderSession.pluginMcpServers(session),
     },
   };
 }

@@ -677,7 +677,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
 });
 
 describe("ClaudeAdapterV2 native protocol logging", () => {
-  it("injects thread-scoped MCP configuration without logging the credential", () => {
+  it("injects thread-scoped MCP configuration and plugins without logging the credential", () => {
     const threadId = ThreadId.make("thread-claude-mcp");
     const mcpSession = {
       environmentId: EnvironmentId.make("environment-claude-mcp"),
@@ -687,7 +687,15 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
       endpoint: "http://127.0.0.1:43123/mcp",
       authorizationHeader: "Bearer secret-claude-token",
       browserToolsAvailable: true,
-    };
+      plugins: [
+        {
+          name: "computer-control",
+          enabled: true,
+          server: { type: "stdio", command: "npx", args: ["-y", "@steipete/peekaboo", "mcp"] },
+        },
+        { name: "docs", enabled: true, server: { type: "http", url: "https://docs.test/mcp" } },
+      ],
+    } as const;
 
     const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
       mcpSession,
@@ -705,6 +713,12 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
           },
           timeout: ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
         },
+        "computer-control": {
+          type: "stdio",
+          command: "npx",
+          args: ["-y", "@steipete/peekaboo", "mcp"],
+        },
+        docs: { type: "http", url: "https://docs.test/mcp" },
       },
     });
 

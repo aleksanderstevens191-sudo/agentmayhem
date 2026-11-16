@@ -28,6 +28,7 @@ export type SettingsPath =
   | "/settings/snap-shot"
   | "/settings/providers"
   | "/settings/threads"
+  | "/settings/plugins"
   | "/settings/browser"
   | "/settings/devices"
   | "/settings/scheduled-tasks"
@@ -103,6 +104,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/snap-shot": msg("SnapShots"),
   "/settings/providers": msg("Providers"),
   "/settings/threads": msg("Threads"),
+  "/settings/plugins": msg("Plugins"),
   "/settings/browser": msg("Browser"),
   "/settings/devices": msg("Devices"),
   "/settings/scheduled-tasks": msg("Scheduled tasks"),
@@ -142,6 +144,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
     paths: [
       "/settings/providers",
       "/settings/threads",
+      "/settings/plugins",
       "/settings/browser",
       "/settings/devices",
       "/settings/scheduled-tasks",
@@ -1019,6 +1022,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/scheduled-tasks",
   },
   {
+    id: "agent-plugins",
+    title: "Your plugins",
+    to: "/settings/plugins",
+    searchTerms: ["mcp server tools add command url every agent"],
+    environmentOnly: true,
+  },
+  {
+    id: "plugin-store",
+    title: "Plugin store",
+    to: "/settings/plugins",
+    searchTerms: ["computer control use screen click type mac peekaboo context7 docs install"],
+    environmentOnly: true,
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/browser",
@@ -1392,6 +1409,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/keybindings": null,
   "/settings/providers": null,
   "/settings/threads": null,
+  "/settings/plugins": "environment-defaults",
   "/settings/browser": null,
   "/settings/devices": null,
   "/settings/source-control": "environment-defaults",
