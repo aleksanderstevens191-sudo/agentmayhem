@@ -1483,6 +1483,14 @@ function codexThreadRuntimeParams(input: {
               omit_tools_from: ["code_mode", "deferred"],
             },
           }),
+      ...Object.fromEntries(
+        (mcpSession?.plugins ?? []).map(({ name, server }) => [
+          `mcp_servers.${name}`,
+          server.type === "stdio"
+            ? { command: server.command, args: [...server.args] }
+            : { url: server.url },
+        ]),
+      ),
     },
   };
 }

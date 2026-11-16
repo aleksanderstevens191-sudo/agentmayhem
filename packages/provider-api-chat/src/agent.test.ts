@@ -143,19 +143,13 @@ function fakeMcpServer(body: Message | undefined): Response {
   }
 }
 
-const chatToolCall = () =>
+const chatToolCall = (name = "memory_search", args = '{"query":"plans"}') =>
   sse([
     {
       choices: [
         {
           delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: "call_1",
-                function: { name: "memory_search", arguments: '{"query":"plans"}' },
-              },
-            ],
+            tool_calls: [{ index: 0, id: "call_1", function: { name, arguments: args } }],
           },
           finish_reason: "tool_calls",
         },
@@ -259,6 +253,64 @@ describe("runApiChatAgent", () => {
         ["user_message_chunk", "tool_call", "tool_call_update", "agent_message_chunk"],
       );
       await restarted.stop();
+    }));
+
+  it("runs a plugin's tools from the program it starts, skipping one that cannot start", () =>
+    withStateDir(async (stateDir) => {
+      // A stdio MCP server that pings its client before it lists its one tool.
+      const program = `
+        const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+        let listId;
+        require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {
+          const message = JSON.parse(line);
+          if (message.method === "initialize") {
+            send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: "2025-06-18", capabilities: {} } });
+          } else if (message.method === "tools/list") {
+            listId = message.id;
+            send({ jsonrpc: "2.0", id: "server-ping", method: "ping" });
+          } else if (message.id === "server-ping" && "result" in message) {
+            const see = { name: "see", description: "Describe the screen", inputSchema: { type: "object" } };
+            send({ jsonrpc: "2.0", id: listId, result: { tools: [see] } });
+          } else if (message.method === "tools/call") {
+            const text = process.env.SCREEN;
+            send({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text }] } });
+          }
+        });`;
+      const chatBodies: Array<Message> = [];
+      const fakeFetch: typeof fetch = async (_url, init) => {
+        chatBodies.push(requestBody(init));
+        return chatBodies.length === 1 ? chatToolCall("see", "{}") : chatText("Finder is open.");
+      };
+      const agent = startAgent({ fetch: fakeFetch, stateDir });
+      await agent.request("initialize", { protocolVersion: 1 });
+      const created = await agent.request("session/new", {
+        mcpServers: [
+          // A mistyped command is left out, and the agent keeps running.
+          { name: "missing", command: "/nonexistent/mcp-plugin", args: [], env: [] },
+          {
+            name: "computer-control",
+            command: process.execPath,
+            args: ["-e", program],
+            env: [{ name: "SCREEN", value: "A Finder window" }],
+          },
+        ],
+      });
+      const sessionId = created.result.sessionId as string;
+      await agent.request("session/set_model", { sessionId, modelId: "gpt-test" });
+      await agent.request("session/prompt", {
+        sessionId,
+        prompt: [{ type: "text", text: "What is on screen?" }],
+      });
+      assert.deepEqual(
+        chatBodies[0]?.tools.map((tool: Message) => tool.function.name),
+        ["see"],
+      );
+      assert.deepEqual(chatBodies[1]?.messages.at(-1), {
+        role: "tool",
+        tool_call_id: "call_1",
+        content: "A Finder window",
+      });
+      await agent.stop();
     }));
 
   it("answers a rate limit with the usage-limit code, dropping the prompt unless a tool ran", () =>

@@ -469,6 +469,13 @@ export const layerWithOptions = (
           );
         },
       );
+      // Read each time a session prepares, so a plugin change reaches the next session.
+      const enabledPlugins = Option.isNone(serverSettings)
+        ? Effect.succeed([])
+        : serverSettings.value.getSettings.pipe(
+            Effect.map((settings) => settings.agentPlugins.filter((plugin) => plugin.enabled)),
+            Effect.orElseSucceed(() => []),
+          );
       const readLinkedEnvironments = Effect.gen(function* () {
         if (options.configureMcp === false || Option.isNone(serverSettings)) return undefined;
         return yield* serverSettings.value.getSettings.pipe(
@@ -577,6 +584,7 @@ export const layerWithOptions = (
                     // A credential issued while the lineage read failed is replaced once it works.
                     (resolved.thread.subagent === true) === subagent
                   ) {
+                    yield* mcpSessions.set({ ...existing, plugins: yield* enabledPlugins });
                     return { mcpCredentialId: existing.providerSessionId, issued: false };
                   }
                   dropMcpCredentialReservation(threadId, existing.providerSessionId);
@@ -591,6 +599,7 @@ export const layerWithOptions = (
                 });
                 yield* mcpSessions.set({
                   ...credential.config,
+                  plugins: yield* enabledPlugins,
                   hasPendingWake: projectionStore
                     .getThreadRecords(threadId, ["runs", "subagents"])
                     .pipe(

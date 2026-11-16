@@ -222,6 +222,7 @@ export function cursorMcpServers(
         Authorization: session.authorizationHeader,
       },
     },
+    ...McpProviderSession.pluginMcpServers(session),
   };
 }
 

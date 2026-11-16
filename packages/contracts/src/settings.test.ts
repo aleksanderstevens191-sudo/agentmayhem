@@ -16,6 +16,7 @@ import {
   idleCompactionPatch,
   PROJECT_SCOPED_SERVER_SETTING_KEYS,
   requiredScopesForProjectMutation,
+  requiredScopesForServerSettingsPatch,
   resolveIdleCompaction,
   resolveProjectProviderInstanceEnabled,
   resolveProviderInstanceEnabled,
@@ -473,6 +474,37 @@ describe("resolveProjectProviderInstanceEnabled", () => {
       },
     };
     expect(resolveProjectProviderInstanceEnabled(settings, projectId, instanceId)).toBe(false);
+  });
+});
+
+describe("ServerSettings agent plugins", () => {
+  it("drops a bad or repeated plugin alone and keeps the rest", () => {
+    const computerControl = {
+      name: "computer-control",
+      enabled: true,
+      server: { type: "stdio", command: "npx", args: ["-y", "@steipete/peekaboo", "mcp"] },
+    };
+    const settings = decodeServerSettings({
+      agentPlugins: [
+        computerControl,
+        { name: "t3-code", enabled: true, server: { type: "http", url: "https://x.test/mcp" } },
+        { name: "no-server", enabled: true },
+        { ...computerControl, enabled: false },
+        { name: "docs", enabled: false, server: { type: "http", url: "https://docs.test/mcp" } },
+      ],
+      autoResumeLimitedThreads: true,
+    });
+    expect(settings.agentPlugins.map((plugin) => [plugin.name, plugin.enabled])).toEqual([
+      ["computer-control", true],
+      ["docs", false],
+    ]);
+    expect(settings.autoResumeLimitedThreads).toBe(true);
+  });
+
+  it("needs the provider scope to change, since every agent starts a plugin", () => {
+    expect(requiredScopesForServerSettingsPatch({ agentPlugins: [] })).toEqual([
+      "providers:manage",
+    ]);
   });
 });
 

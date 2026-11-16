@@ -9,7 +9,7 @@ import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeReadline from "node:readline";
 
-import { connectMcpServer, type McpHttpServer, type McpToolResult } from "./mcp.ts";
+import { connectMcpServer, type McpServer, type McpToolResult } from "./mcp.ts";
 import { callProjectFileTool, PROJECT_FILE_TOOLS, projectSystemPrompt } from "./projectFiles.ts";
 import {
   API_CHAT_KEY_VARIABLE,
@@ -51,7 +51,7 @@ interface Session {
   readonly cwd: string | undefined;
   model: string;
   turns: Array<ChatTurn>;
-  servers: ReadonlyArray<McpHttpServer>;
+  servers: ReadonlyArray<McpServer>;
   toolbox: Promise<Toolbox> | undefined;
   running: AbortController | undefined;
 }
@@ -72,20 +72,32 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** The HTTP MCP servers of `session/new` or `session/load`; this agent advertises no other kind. */
-function httpMcpServers(value: unknown): ReadonlyArray<McpHttpServer> {
-  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+/** Each `{ name, value }` pair of an ACP header or environment list, as a record. */
+function namedValues(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    (Array.isArray(value) ? value : []).flatMap((entry) => {
+      const pair = asRecord(entry);
+      return typeof pair?.name === "string" && typeof pair.value === "string"
+        ? [[pair.name, pair.value]]
+        : [];
+    }),
+  );
+}
+
+/** The HTTP and stdio MCP servers of `session/new` or `session/load`. ACP stdio has no `type`. */
+function sessionMcpServers(value: unknown): ReadonlyArray<McpServer> {
+  return (Array.isArray(value) ? value : []).flatMap((entry): ReadonlyArray<McpServer> => {
     const server = asRecord(entry);
-    if (server?.type !== "http" || typeof server.url !== "string") return [];
-    const headers = Object.fromEntries(
-      (Array.isArray(server.headers) ? server.headers : []).flatMap((header) => {
-        const pair = asRecord(header);
-        return typeof pair?.name === "string" && typeof pair.value === "string"
-          ? [[pair.name, pair.value]]
-          : [];
-      }),
-    );
-    return [{ name: String(server.name ?? "mcp"), url: server.url, headers }];
+    if (server === undefined) return [];
+    const name = String(server.name ?? "mcp");
+    if (server.type === "http" && typeof server.url === "string") {
+      return [{ name, url: server.url, headers: namedValues(server.headers) }];
+    }
+    if (server.type === undefined && typeof server.command === "string") {
+      const args = Array.isArray(server.args) ? server.args.map(String) : [];
+      return [{ name, command: server.command, args, env: namedValues(server.env) }];
+    }
+    return [];
   });
 }
 
@@ -448,7 +460,7 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
           cwd: projectFolder(params.cwd),
           model: "",
           turns: [],
-          servers: httpMcpServers(params.mcpServers),
+          servers: sessionMcpServers(params.mcpServers),
           toolbox: undefined,
           running: undefined,
         });
@@ -463,7 +475,7 @@ export async function runApiChatAgent(options: ApiChatAgentOptions = {}): Promis
           id,
           cwd: projectFolder(params.cwd),
           ...stored,
-          servers: httpMcpServers(params.mcpServers),
+          servers: sessionMcpServers(params.mcpServers),
           toolbox: undefined,
           running: undefined,
         };

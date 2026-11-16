@@ -204,6 +204,7 @@ export interface AcpAdapterV2RuntimeInput {
   readonly mcpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly acpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly httpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly pluginMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly processEnvironment?: NodeJS.ProcessEnv;
   readonly resumeSessionId?: string;
   readonly interruptPromptOnCancel?: boolean;
@@ -876,6 +877,7 @@ interface AcpMcpContext {
   readonly servers: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly acpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly httpServers: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly pluginServers: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly processEnvironment?: NodeJS.ProcessEnv;
   readonly endpoint?: string;
   readonly authorization?: string;
@@ -888,10 +890,11 @@ function acpMcpContext(
   deferMcpTools: boolean | undefined,
 ): AcpMcpContext {
   if (session === undefined) {
-    return { servers: [], acpServers: [], httpServers: [] };
+    return { servers: [], acpServers: [], httpServers: [], pluginServers: [] };
   }
   // codex-acp 1.2.0 and pi-acp drop injected HTTP servers, so HTTP is opt-in per flavor.
   return {
+    pluginServers: acpPluginServers(session),
     servers: [
       {
         name: "t3-code",
@@ -942,7 +945,18 @@ function acpMcpActivation(context: AcpMcpContext) {
     mcpServers: context.servers,
     acpMcpServers: context.acpServers,
     httpMcpServers: context.httpServers,
+    pluginMcpServers: context.pluginServers,
   };
+}
+
+function acpPluginServers(
+  session: Pick<McpProviderSession.McpProviderSessionConfig, "plugins">,
+): ReadonlyArray<EffectAcpSchema.McpServer> {
+  return (session.plugins ?? []).map(({ name, server }) =>
+    server.type === "stdio"
+      ? { name, command: server.command, args: [...server.args], env: [] }
+      : { type: "http" as const, name, url: server.url, headers: [] },
+  );
 }
 
 function nativeThreadId(
@@ -2461,6 +2475,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             mcpServers: mcpContext.servers,
             acpMcpServers: mcpContext.acpServers,
             httpMcpServers: mcpContext.httpServers,
+            pluginMcpServers: mcpContext.pluginServers,
             ...(mcpContext.processEnvironment === undefined
               ? {}
               : { processEnvironment: mcpContext.processEnvironment }),

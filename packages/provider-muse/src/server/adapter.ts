@@ -1945,6 +1945,19 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                     url: mcpSession.endpoint,
                     headers: { Authorization: mcpSession.authorizationHeader },
                   },
+                  // Only URL plugins: this protocol's shape for a program server is unconfirmed.
+                  ...Object.fromEntries(
+                    (mcpSession.plugins ?? []).flatMap(({ name, server }) =>
+                      server.type === "http"
+                        ? [
+                            [
+                              name,
+                              { transport: "streamableHttp", mode: "optional", url: server.url },
+                            ],
+                          ]
+                        : [],
+                    ),
+                  ),
                 },
               }
             : undefined;

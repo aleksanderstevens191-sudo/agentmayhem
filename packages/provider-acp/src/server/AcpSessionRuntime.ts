@@ -144,6 +144,8 @@ export interface AcpSessionRuntimeOptions {
   ) => Effect.Effect<void, never>;
   readonly acpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly httpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
+  /** The user's plugins, sent beside T3's server; HTTP ones only to agents that take HTTP. */
+  readonly pluginMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   readonly protocolLogging?: {
     readonly logIncoming?: boolean;
@@ -1093,6 +1095,7 @@ export interface AcpSessionActivationOptions {
   readonly mcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly acpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly httpMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
+  readonly pluginMcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
 }
 
 export class AcpSessionRuntime extends Context.Service<
@@ -2145,7 +2148,7 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
     return yield* effect;
   });
 
-  const sessionMcpServers = (
+  const t3McpServers = (
     initializeResult: EffectAcpSchema.InitializeResponse,
     activationOptions?: AcpSessionActivationOptions,
   ): ReadonlyArray<EffectAcpSchema.McpServer> => {
@@ -2159,6 +2162,17 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
       return httpServers;
     }
     return activationOptions?.mcpServers ?? options.mcpServers ?? [];
+  };
+
+  const sessionMcpServers = (
+    initializeResult: EffectAcpSchema.InitializeResponse,
+    activationOptions?: AcpSessionActivationOptions,
+  ): ReadonlyArray<EffectAcpSchema.McpServer> => {
+    const takesHttp = initializeResult.agentCapabilities?.mcpCapabilities?.http === true;
+    const plugins = (activationOptions?.pluginMcpServers ?? options.pluginMcpServers ?? []).filter(
+      (server) => takesHttp || !("type" in server) || server.type !== "http",
+    );
+    return [...t3McpServers(initializeResult, activationOptions), ...plugins];
   };
 
   const sessionSetupFields = (initializeResult: EffectAcpSchema.InitializeResponse) => {

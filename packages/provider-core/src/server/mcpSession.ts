@@ -1,4 +1,4 @@
-import type { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import type { AgentPlugin, EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 
 /**
@@ -20,7 +20,20 @@ export interface McpProviderSessionConfig {
   readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
   /** True while a delegated task this thread started will wake it with its result. */
   readonly hasPendingWake?: Effect.Effect<boolean>;
+  /** The user's enabled plugins, which each adapter adds beside `t3-code`. */
+  readonly plugins?: ReadonlyArray<AgentPlugin>;
 }
+
+/** The session's plugins by name, in the server shape Claude and Cursor take. */
+export const pluginMcpServers = (session: Pick<McpProviderSessionConfig, "plugins"> | undefined) =>
+  Object.fromEntries(
+    (session?.plugins ?? []).map(({ name, server }) => [
+      name,
+      server.type === "stdio"
+        ? { type: "stdio" as const, command: server.command, args: [...server.args] }
+        : { type: "http" as const, url: server.url },
+    ]),
+  );
 
 export function withAgentDeviceEnvironment(
   base: NodeJS.ProcessEnv,
