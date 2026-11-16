@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { AgentPlugin } from "@t3tools/contracts";
+import { type AgentPlugin, AuthProvidersManageScope } from "@t3tools/contracts";
 import * as Equal from "effect/Equal";
 import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
+import { useEnvironmentsWithScope } from "../../state/session";
 import { PLUGIN_STORE } from "./pluginStore";
 import {
   describePluginServer,
@@ -26,9 +27,11 @@ type Plugins = ReadonlyArray<AgentPlugin>;
 
 function AddPluginForm({
   plugins,
+  disabled,
   onAdd,
 }: {
   readonly plugins: Plugins;
+  readonly disabled: boolean;
   readonly onAdd: (plugin: AgentPlugin) => void;
 }) {
   const [name, setName] = useState("");
@@ -36,7 +39,7 @@ function AddPluginForm({
   const trimmedName = name.trim();
   const nameProblem = trimmedName === "" ? null : pluginNameProblem(trimmedName, plugins);
   const server = parsePluginServer(source);
-  const ready = trimmedName !== "" && nameProblem === null && server !== null;
+  const ready = !disabled && trimmedName !== "" && nameProblem === null && server !== null;
 
   return (
     <form
@@ -56,6 +59,7 @@ function AddPluginForm({
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="name"
+          disabled={disabled}
           spellCheck={false}
           aria-label="Plugin name"
           aria-invalid={nameProblem !== null}
@@ -66,6 +70,7 @@ function AddPluginForm({
           value={source}
           onChange={(event) => setSource(event.target.value)}
           placeholder="npx -y some-mcp-server, or https://…/mcp"
+          disabled={disabled}
           spellCheck={false}
           aria-label="Command or URL"
         />
@@ -81,7 +86,12 @@ function AddPluginForm({
 
 /** MCP servers every agent on the environment gets beside T3 Code's own (`agentPlugins`). */
 export function PluginsSettingsPanel() {
-  const { scope } = useSettingsScope();
+  const { scope, connectedEnvironments } = useSettingsScope();
+  // Plugin changes need `providers:manage`, not `settings:write` (`requiredScopesForServerSettingsPatch`).
+  const managers = useEnvironmentsWithScope(connectedEnvironments, AuthProvidersManageScope);
+  const canManage =
+    connectedEnvironments.length > 0 &&
+    connectedEnvironments.every((environment) => managers.has(environment.environmentId));
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const mixed = useScopedSettingsMixed(["agentPlugins"]);
@@ -133,15 +143,16 @@ export function PluginsSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="plugins" title="Plugins">
         <SettingsRow
-          serverScoped
           settingKeys={["agentPlugins"]}
           mixed={mixed}
           {...searchableSetting("agent-plugins")}
           description="Every agent on this environment gets the tools of the plugins turned on here. Muse gets URL plugins only; OpenCode and Pi get none yet. A thread picks up a change when its agent next starts."
           status={
-            mixed
-              ? "Environments have different plugins. A change here replaces all of them."
-              : null
+            !canManage
+              ? "Changing plugins needs permission to manage providers on every selected environment."
+              : mixed
+                ? "Environments have different plugins. A change here replaces all of them."
+                : null
           }
         >
           <div className="flex flex-col gap-3 pt-3 pb-2">
@@ -161,6 +172,7 @@ export function PluginsSettingsPanel() {
                     <Switch
                       size="sm"
                       checked={plugin.enabled}
+                      disabled={!canManage}
                       onCheckedChange={(enabled) =>
                         save(
                           draft.map((entry) =>
@@ -175,6 +187,7 @@ export function PluginsSettingsPanel() {
                       size="icon-xs"
                       variant="ghost-muted"
                       aria-label={`Remove ${plugin.name}`}
+                      disabled={!canManage}
                       onClick={() => save(draft.filter((entry) => entry.name !== plugin.name))}
                     >
                       <XIcon />
@@ -188,7 +201,7 @@ export function PluginsSettingsPanel() {
                 URL.
               </p>
             )}
-            <AddPluginForm plugins={draft} onAdd={add} />
+            <AddPluginForm plugins={draft} disabled={!canManage} onAdd={add} />
           </div>
         </SettingsRow>
       </SettingsSection>
@@ -199,7 +212,6 @@ export function PluginsSettingsPanel() {
           return (
             <SettingsRow
               key={entry.plugin.name}
-              serverScoped
               settingKeys={["agentPlugins"]}
               title={entry.title}
               description={entry.description}
@@ -216,7 +228,7 @@ export function PluginsSettingsPanel() {
                   <Button
                     variant="outline"
                     size="compact"
-                    disabled={added}
+                    disabled={added || !canManage}
                     onClick={() => add(entry.plugin)}
                   >
                     {added ? "Added" : "Add"}

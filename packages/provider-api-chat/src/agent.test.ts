@@ -255,7 +255,7 @@ describe("runApiChatAgent", () => {
       await restarted.stop();
     }));
 
-  it("runs a plugin's tools from the program it starts, answering the program's ping", () =>
+  it("runs a plugin's tools from the program it starts, skipping one that cannot start", () =>
     withStateDir(async (stateDir) => {
       // A stdio MCP server that pings its client before it lists its one tool.
       const program = `
@@ -285,6 +285,8 @@ describe("runApiChatAgent", () => {
       await agent.request("initialize", { protocolVersion: 1 });
       const created = await agent.request("session/new", {
         mcpServers: [
+          // A mistyped command is left out, and the agent keeps running.
+          { name: "missing", command: "/nonexistent/mcp-plugin", args: [], env: [] },
           {
             name: "computer-control",
             command: process.execPath,

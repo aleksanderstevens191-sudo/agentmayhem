@@ -253,8 +253,16 @@ function stdioTransport(server: McpStdioServer): McpTransport {
           { once: true },
         );
       });
-      await send({ jsonrpc: "2.0", id, method, params });
-      return replyResult(server.name, method, await reply);
+      try {
+        // Together, so a server that cannot start rejects both without leaving one unhandled.
+        const [, message] = await Promise.all([
+          send({ jsonrpc: "2.0", id, method, params }),
+          reply,
+        ]);
+        return replyResult(server.name, method, message);
+      } finally {
+        pending.delete(id);
+      }
     },
     notify: (method) => send({ jsonrpc: "2.0", method }),
     setProtocolVersion: () => undefined,
