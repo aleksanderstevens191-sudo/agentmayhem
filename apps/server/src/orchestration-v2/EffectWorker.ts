@@ -350,6 +350,9 @@ export const layerExecutor: Layer.Layer<
                         ...(message.linkedSender === undefined
                           ? {}
                           : { linkedSender: message.linkedSender }),
+                        ...(message.outsideAgent === undefined
+                          ? {}
+                          : { outsideAgent: message.outsideAgent }),
                       })
                       .pipe(
                         // A disabled instance cannot retry this completed turn; its result stands.

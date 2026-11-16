@@ -9,18 +9,24 @@ import * as Effect from "effect/Effect";
 
 type SentMessage = Pick<
   OrchestrationV2ConversationMessage,
-  "createdBy" | "senderThreadId" | "linkedSender"
+  "createdBy" | "senderThreadId" | "linkedSender" | "outsideAgent"
 >;
 
 /**
- * The other agent's thread that sent `message` into `thread`. Undefined for the user, the thread
- * itself, and the parent a delegated thread works for, whose results already reach it.
+ * The other agent that sent `message` into `thread`: its thread, or an outside agent's name.
+ * Undefined for the user, the thread itself, and the parent a delegated thread works for, whose
+ * results already reach it.
  */
 export function agentMessageSender(
   message: SentMessage,
   thread: Pick<OrchestrationV2AppThread, "id" | "lineage" | "delegatedFrom">,
-): { readonly threadId: ThreadId } | OrchestrationV2LinkedSender | undefined {
+):
+  | { readonly threadId: ThreadId }
+  | OrchestrationV2LinkedSender
+  | { readonly outsideAgent: string }
+  | undefined {
   if (message.createdBy !== "agent") return undefined;
+  if (message.outsideAgent) return { outsideAgent: message.outsideAgent };
   const linked = message.linkedSender;
   if (linked !== undefined) {
     const parent = thread.delegatedFrom;
@@ -50,7 +56,9 @@ export const withAgentMessageSender = Effect.fn("agentMessageSender.withAgentMes
     if (thread._tag === "None") return input.text;
     const sender = agentMessageSender(input.message, thread.value);
     if (sender === undefined) return input.text;
-    if ("title" in sender) return t3AgentMessagePrompt(input.text, sender);
+    if (!("threadId" in sender) || "title" in sender) {
+      return t3AgentMessagePrompt(input.text, sender);
+    }
     const title = yield* input.getThread(sender.threadId).pipe(
       Effect.map((found) => found.title),
       Effect.orElseSucceed(() => undefined),

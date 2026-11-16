@@ -55,17 +55,25 @@ export const T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH = deviceToolInstr
   ` Load them with ToolSearch \`select:${T3_CODE_DEVICE_TOOLS.map((tool) => `mcp__t3-code__${tool}`).join(",")}\`.`,
 );
 
-/** The thread whose agent sent a message, as the receiving agent needs it to answer. */
-export interface T3AgentMessageSender {
-  readonly threadId: string;
-  readonly title?: string | undefined;
-  readonly environmentId?: string | undefined;
-}
+/**
+ * The thread whose agent sent a message, as the receiving agent needs it to answer, or the name
+ * of an outside agent, which has no thread here.
+ */
+export type T3AgentMessageSender =
+  | {
+      readonly threadId: string;
+      readonly title?: string | undefined;
+      readonly environmentId?: string | undefined;
+    }
+  | { readonly outsideAgent: string };
 
 /** Names the agent that sent this prompt, so the receiver doesn't take it for the user. */
 export function t3AgentMessagePrompt(prompt: string, sender: T3AgentMessageSender): string {
   // Native slash commands must remain at the start of the prompt.
   if (prompt.trimStart().startsWith("/")) return prompt;
+  if ("outsideAgent" in sender) {
+    return `<t3_agent_message>From the outside agent ${JSON.stringify(sender.outsideAgent)}, not from the user. It reads your reply in this thread, so answer here, not with \`t3_thread_send\`.</t3_agent_message>\n\n${prompt}`;
+  }
   const ids = [
     `threadId \`${sender.threadId}\``,
     ...(sender.environmentId === undefined ? [] : [`environmentId \`${sender.environmentId}\``]),

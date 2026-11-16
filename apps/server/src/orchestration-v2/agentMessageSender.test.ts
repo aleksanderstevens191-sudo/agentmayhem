@@ -33,7 +33,7 @@ describe("agentMessageSender", () => {
     assert.isUndefined(agentMessageSender({ createdBy: "user", senderThreadId: other }, topLevel));
   });
 
-  it("names a linked machine's agent unless this thread works for it", () => {
+  it("names a linked machine's agent unless this thread works for it, and an outside agent", () => {
     const linked = { createdBy: "agent", linkedSender: remote } as const;
     assert.deepEqual(agentMessageSender(linked, topLevel), remote);
     assert.isUndefined(
@@ -41,6 +41,10 @@ describe("agentMessageSender", () => {
         ...topLevel,
         delegatedFrom: { environmentId: remote.environmentId, threadId: other, title: "Remote" },
       }),
+    );
+    assert.deepEqual(
+      agentMessageSender({ createdBy: "agent", outsideAgent: "Grok Bot" }, topLevel),
+      { outsideAgent: "Grok Bot" },
     );
   });
 });

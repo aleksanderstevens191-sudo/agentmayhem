@@ -70,6 +70,7 @@ export const MCP_APPS: readonly McpApp[] = [
       "Choose Add custom connector and paste the URL.",
       "The Free plan allows one custom connector.",
     ],
+    note: "Claude Duet uses the connectors in your Claude account too.",
     docs: "https://claude.com/docs/connectors/building/directory-vs-custom",
   },
   {

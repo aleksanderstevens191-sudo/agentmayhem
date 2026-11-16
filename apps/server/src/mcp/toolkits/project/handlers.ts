@@ -269,6 +269,7 @@ export const layer = McpToolAccess.toLayer(ProjectToolkit, {
                 initialMessage: {
                   messageId,
                   ...(caller === undefined ? {} : { senderThreadId: caller.id }),
+                  ...McpInvocationContext.withOutsideAgent(scope),
                   text: input.message ?? "",
                   attachments,
                 },
