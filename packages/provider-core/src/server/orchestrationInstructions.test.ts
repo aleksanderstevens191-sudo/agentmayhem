@@ -86,7 +86,7 @@ describe("T3 device instructions", () => {
 });
 
 describe("T3 agent messages", () => {
-  it("name the sending thread, and its machine when linked, ahead of the message", () => {
+  it("name the sending thread, its machine when linked, or the outside agent", () => {
     const local = t3AgentMessagePrompt("Is the build green?", {
       threadId: "thread-1",
       title: 'Release "v2"',
@@ -101,6 +101,9 @@ describe("T3 agent messages", () => {
       }),
       "(threadId `thread-1`, environmentId `env-2`)",
     );
+    const outside = t3AgentMessagePrompt("Summarize the thread.", { outsideAgent: "Grok Bot" });
+    assert.include(outside, 'From the outside agent "Grok Bot", not from the user.');
+    assert.isTrue(outside.endsWith("\n\nSummarize the thread."));
   });
 
   it("leave a native slash command at the start of the prompt", () => {

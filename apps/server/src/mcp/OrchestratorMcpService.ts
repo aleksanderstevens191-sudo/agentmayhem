@@ -116,6 +116,7 @@ import {
   type McpThreadInvocationScope,
   requireThreadScope,
   threadLinkFor,
+  withOutsideAgent,
 } from "./McpInvocationContext.ts";
 import * as Metrics from "../observability/Metrics.ts";
 import {
@@ -3218,6 +3219,7 @@ const make = Effect.gen(function* () {
           ...(parent === undefined && scope.client?.senderThread !== undefined
             ? { linkedSender: scope.client.senderThread }
             : {}),
+          ...withOutsideAgent(scope),
           messageId,
           text: input.message,
           attachments: [],

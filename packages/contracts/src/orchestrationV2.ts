@@ -152,6 +152,12 @@ export const OrchestrationV2LinkedSender = Schema.Struct({
 });
 export type OrchestrationV2LinkedSender = typeof OrchestrationV2LinkedSender.Type;
 
+/**
+ * The outside agent that sent this message over MCP, by the name it signed in with, such as
+ * "Grok Bot". It has no thread here, so it reads the reply in this thread.
+ */
+const OrchestrationV2OutsideAgent = Schema.optional(Schema.String);
+
 export const OrchestrationV2NativeRefStrength = Schema.Literals(["strong", "weak", "none"]);
 export type OrchestrationV2NativeRefStrength = typeof OrchestrationV2NativeRefStrength.Type;
 
@@ -1354,6 +1360,7 @@ export const OrchestrationV2ConversationMessage = Schema.Struct({
   scheduledTaskId: Schema.optional(ScheduledTaskId),
   senderThreadId: Schema.optional(ThreadId),
   linkedSender: Schema.optional(OrchestrationV2LinkedSender),
+  outsideAgent: OrchestrationV2OutsideAgent,
   idleCompaction: Schema.optional(OrchestrationV2IdleCompaction),
   /**
    * The message is the script a provider-native workflow run executes, not prose. Clients show
@@ -1674,6 +1681,7 @@ export const OrchestrationV2TurnItem = Schema.Union([
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
     linkedSender: Schema.optional(OrchestrationV2LinkedSender),
+    outsideAgent: OrchestrationV2OutsideAgent,
     idleCompaction: Schema.optional(OrchestrationV2IdleCompaction),
     workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     freshContext: OrchestrationV2Run.fields.freshContext,
@@ -2551,6 +2559,7 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
     linkedSender: Schema.optional(OrchestrationV2LinkedSender),
+    outsideAgent: OrchestrationV2OutsideAgent,
     idleCompaction: Schema.optional(OrchestrationV2IdleCompaction),
     workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     freshContext: OrchestrationV2Run.fields.freshContext,
@@ -3276,6 +3285,7 @@ export const OrchestrationV2Command = Schema.Union([
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
     linkedSender: Schema.optional(OrchestrationV2LinkedSender),
+    outsideAgent: OrchestrationV2OutsideAgent,
     idleCompaction: Schema.optional(OrchestrationV2IdleCompaction),
     /** Start a new provider session without the thread's earlier context. Never steers. */
     freshContext: Schema.optional(Schema.Boolean),

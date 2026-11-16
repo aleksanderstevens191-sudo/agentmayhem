@@ -12,8 +12,9 @@ Open the command palette (`Cmd/Ctrl+K`) and choose **Use T3 Code in another
 app (MCP)**, or use the button in **Settings → Sharing & access**. Pick the
 app and follow the step for that app. Assistants like
 Poke and Claude run in the cloud, so the wizard first asks you to sign in to T3
-Connect and turn it on for the environment. To reach your other machines through
-the same connection, turn on **Linked environments** in Labs and
+Connect and turn it on for the environment. Claude Duet uses the connectors in
+your Claude account, so choose Claude for it. To reach your other machines
+through the same connection, turn on **Linked environments** in Labs and
 [link them](./remote-access.md#link-another-environment).
 
 When the app opens the sign-in page, choose what it may do and approve with your
@@ -91,6 +92,9 @@ T3 Code.
 - To hand off work, start a thread with `t3_thread_launch`, then follow it with
   `t3_thread_wait` or `t3_thread_read`, instead of `create_threads` or
   `delegate_task`.
+- A message it sends to a thread shows the name it signed in with, and the
+  thread's agent is told the message came from that agent, not from you. The
+  thread's agent answers in the thread, where the outside agent reads it.
 - Tools that default to the caller's own project or thread need an explicit
   `projectId` or `threadId`.
 - To list threads across projects, call `t3_thread_list` with

@@ -141,6 +141,7 @@ export interface ThreadFeedMessage {
   readonly scheduledTaskId?: ScheduledTaskId;
   readonly senderThreadId?: ThreadId;
   readonly linkedSender?: import("@t3tools/contracts").OrchestrationV2LinkedSender;
+  readonly outsideAgent?: string;
   readonly idleCompaction?: import("@t3tools/contracts").OrchestrationV2IdleCompaction;
   readonly visibility: OrchestrationV2ProjectedTurnItem["visibility"];
   readonly sourceThreadId: ThreadId;
@@ -2470,6 +2471,7 @@ export function buildThreadFeed(
                 ...(item.scheduledTaskId ? { scheduledTaskId: item.scheduledTaskId } : {}),
                 ...(item.senderThreadId ? { senderThreadId: item.senderThreadId } : {}),
                 ...(item.linkedSender ? { linkedSender: item.linkedSender } : {}),
+                ...(item.outsideAgent ? { outsideAgent: item.outsideAgent } : {}),
                 ...(item.idleCompaction ? { idleCompaction: item.idleCompaction } : {}),
               }
             : {}),

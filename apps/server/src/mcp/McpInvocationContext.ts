@@ -131,6 +131,17 @@ export const withRuntimeModeCeiling = (
   };
 };
 
+/**
+ * Names an outside agent on the message it sends, so the agent it reaches knows who sent it. Only
+ * a client with no thread here: a linked environment's agent is named by `senderThread`.
+ */
+export const withOutsideAgent = (
+  scope: Pick<McpInvocationScope, "thread" | "client">,
+): { readonly outsideAgent?: string } =>
+  scope.thread === undefined && scope.client !== undefined && scope.client.linked !== true
+    ? { outsideAgent: scope.client.label }
+    : {};
+
 /** Thread callers default to their own thread; client callers need thread for tools that act as the caller. */
 export interface McpInvocationScope {
   readonly environmentId: EnvironmentId;

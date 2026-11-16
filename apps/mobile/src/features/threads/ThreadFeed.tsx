@@ -2059,7 +2059,11 @@ function renderFeedEntry(
                 <AgentMessageFoldHeader
                   environmentId={senderRef?.environmentId ?? props.environmentId}
                   senderThreadId={senderRef?.threadId}
-                  {...(message.linkedSender ? { senderTitle: message.linkedSender.title } : {})}
+                  {...(message.linkedSender
+                    ? { senderTitle: message.linkedSender.title }
+                    : message.outsideAgent
+                      ? { senderTitle: message.outsideAgent }
+                      : {})}
                   summary={
                     replaceComposerContextReferences(presentation.text, (ref) => ref.label)
                       .split(/\r?\n/)
