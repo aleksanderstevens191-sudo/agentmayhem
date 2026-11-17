@@ -47,10 +47,12 @@ jobs:
           toolchain: stable
           targets: aarch64-apple-darwin
 
+      # Without GITHUB_REPOSITORY the build writes no update feed; mac-latest
+      # holds only the .dmg, not the metadata the in-app updater reads.
       - name: Build .dmg
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: vp run dist:desktop:dmg:arm64
+        run: env -u GITHUB_REPOSITORY vp run dist:desktop:dmg:arm64
 
       - name: Check the app is signed well enough to open
         shell: bash
