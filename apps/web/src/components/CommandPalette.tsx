@@ -1733,6 +1733,20 @@ function OpenCommandPaletteDialog(props: {
     });
   }
   const contextualProjectGroup = currentProjectGroup ?? projectGroups[0] ?? null;
+
+  actionItems.push({
+    kind: "action",
+    value: "action:projects-overview",
+    searchTerms: ["projects", "overview", "home", "agents", "threads", "files", "instructions"],
+    title: "Open projects",
+    icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({
+        to: "/overview",
+        search: contextualProjectGroup ? { project: contextualProjectGroup.projectKey } : {},
+      });
+    },
+  });
   if (contextualProjectGroup) {
     actionItems.push({
       kind: "action",
